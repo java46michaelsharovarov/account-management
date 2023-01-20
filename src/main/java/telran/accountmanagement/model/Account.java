@@ -12,7 +12,6 @@ public class Account implements Serializable {
 
 	private static final long serialVersionUID = 1L;
 	
-	@NotNull
 	@NotEmpty
 	@Email(message = "Username should be in format of Email")
 	public String username;

@@ -82,7 +82,7 @@ public class AccountsController {
 	
 	@PreDestroy
 	void shutdown() {
-		LOG.info("Bye, performed graceful shutdown");
+		LOG.info("bye, performed graceful shutdown");
 	}
 
 }

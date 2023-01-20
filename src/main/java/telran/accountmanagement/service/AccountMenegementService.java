@@ -1,12 +1,14 @@
 package telran.accountmanagement.service;
 
-import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.util.HashMap;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -21,15 +23,12 @@ import telran.accountmanagement.model.Account;
 public class AccountMenegementService implements AccountsService {
 
 	HashMap<String, Account> accounts;
+	@Autowired
 	PasswordEncoder encoder;
+	@Autowired
 	UserDetailsManager manager;
 	@Value("${app.file.data.name}")
 	String fileName;
-
-	public AccountMenegementService(PasswordEncoder encoder, UserDetailsManager manager) {
-		this.encoder = encoder;
-		this.manager = manager;
-	}
 	
 	@Override
 	public boolean addAccount(Account account) {
@@ -42,7 +41,7 @@ public class AccountMenegementService implements AccountsService {
 				.roles(account.role)
 				.build());
 		LOG.debug("user {} has been added", account.username);
-		return true;
+		return true; 
 	}
 
 	@Override
@@ -79,39 +78,35 @@ public class AccountMenegementService implements AccountsService {
 	
 	@SuppressWarnings("unchecked")
 	@PostConstruct
-	void fillingManager() throws Exception {
-		accounts = (HashMap<String, Account>) getDataObject(fileName);
-		if (!accounts.isEmpty()) {
+	void restoreAccounts() {
+		try (ObjectInputStream input =
+				new ObjectInputStream(new FileInputStream(fileName))) {
+			accounts =  (HashMap<String, Account>) input.readObject();
 			accounts.forEach((u, a) -> {
 				manager.createUser(
 					User.withUsername(a.username)
 					.password(encoder.encode(a.password))
 					.roles(a.role)
 					.build());
-				LOG.info("Added user: {}", manager.loadUserByUsername(u));
+				LOG.info("added user: {}", manager.loadUserByUsername(u));
 			});
-		}
-	}
-
-	private Object getDataObject(String fileName) throws Exception {
-		File source = new File(fileName);
-		if(source.exists()){
-			try (ObjectInputStream input =
-					new ObjectInputStream(new FileInputStream(new File(fileName)))) {
-				return input.readObject();
-			}
-		} else {
-			return new HashMap<>();
-		}
+		} catch (FileNotFoundException e) {
+			LOG.warn("file {} doesn't exists", fileName);
+			accounts = new HashMap<>();
+		} catch (Exception e) {
+			LOG.error("error at restoring accounts {}", e.getMessage());
+		} 
 	}
 	
 	@PreDestroy
-	void save() throws Exception {
+	void save() {
 		try (ObjectOutputStream output =
-				new ObjectOutputStream(new FileOutputStream(new File(fileName)))) {
-			output.writeObject(accounts);			
+				new ObjectOutputStream(new FileOutputStream(fileName))) {
+			output.writeObject(accounts);	
+			LOG.info("data is saved to file - {}", fileName);
+		} catch (IOException e) {
+			LOG.error("saving to file caused exception {}", e.getMessage());
 		}
-		LOG.info("Data is saved to file - {}", fileName);
 	}
 
 }

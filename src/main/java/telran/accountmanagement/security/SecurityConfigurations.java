@@ -48,7 +48,7 @@ public class SecurityConfigurations {
 				.password(bCryptPasswordEncoder.encode(adminPassword))
 				.roles("ADMIN")
 				.build());
-		LOG.info("Added user: {}", manager.loadUserByUsername(admin));
+		LOG.info("added administrator: {}", manager.loadUserByUsername(admin)); 
 		return manager;
 	}
 	
