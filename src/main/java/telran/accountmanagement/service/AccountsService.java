@@ -11,6 +11,6 @@ public interface AccountsService {
 	boolean addAccount(Account account);
 	boolean updateAccount(Account account);
 	boolean isExist(String username);
-	boolean deleteAccount(String username);
+	boolean deleteAccount(String username); 
 	
 }	
