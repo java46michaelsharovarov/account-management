@@ -20,9 +20,9 @@ import org.springframework.security.web.SecurityFilterChain;
 public class SecurityConfigurations {
 
 	Logger LOG = LoggerFactory.getLogger(SecurityConfigurations.class);
-	@Value("${app.admin.username}")
+	@Value("${app.admin.username:admin@gmail.com}")
 	String admin;	
-	@Value("${app.admin.password}")
+	@Value("${app.admin.password:${ADMIN_PASSWORD}}")
 	String adminPassword;
 	
 	@Bean

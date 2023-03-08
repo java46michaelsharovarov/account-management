@@ -1,5 +1,7 @@
 package telran.accountmanagement.controller;
 
+import java.util.List;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,7 +41,7 @@ public class AccountsController {
 	AccountsService service;
 	@Autowired
 	ObjectMapper mapper;
-	@Value("${app.admin.username}")
+	@Value("${app.admin.username:admin@gmail.com}")
 	String admin;
 	Logger LOG = LoggerFactory.getLogger(AccountsController.class);
 
@@ -80,6 +82,36 @@ public class AccountsController {
 		return service.isExist(username); 
 	}
 	
+	@GetMapping
+	List<String> getAccounts(@RequestParam(name = "role", defaultValue = "") String role) {
+		return role.isEmpty() ? service.getActiveAccounts() : service.getAccountsByRole(role);
+	}
+	
+	@GetMapping("/roles/max")
+	int getMaxRoles() {
+		return service.getMaxRoles();
+	}
+	
+	@GetMapping("/roles/max/all")
+	List<String> getAllAccountsWithMaxRoles() {
+		return service.getAllAccountsWithMaxRoles();
+	}
+	
+	@GetMapping("/roles/max/occurrence")
+	int getMaxRolesOccurrenceCount() {
+		return service.getMaxRolesOccurrenceCount();
+	}
+	
+	@GetMapping("/roles/max/occurrence/all")
+	List<String> getAllRolesWithMaxOccurrence() {
+		return service.getAllRolesWithMaxOccurrence();
+	}
+	
+	@GetMapping("/roles/min/occurrence/active")
+	int getActivMinRolesOccurrenceCount() {
+		return service.getActivMinRolesOccurrenceCount();
+	}
+
 	@PreDestroy
 	void shutdown() {
 		LOG.info("bye, performed graceful shutdown");
