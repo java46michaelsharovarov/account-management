@@ -1,6 +1,7 @@
 package telran.accountmanagement.entities;
 
 import java.time.LocalDateTime;
+import java.util.Arrays;
 
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
@@ -62,5 +63,10 @@ public class AccountEntity {
 		this.roles = roles;
 	}
 	
+	@Override
+	public String toString() {
+		return "AccountEntity [email=" + email + ", password=" + password + ", expiration=" + expiration + ", revoked="
+				+ revoked + ", roles=" + Arrays.toString(roles) + "]";
+	}
 	
 }

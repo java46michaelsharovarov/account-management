@@ -1,6 +1,7 @@
 package telran.accountmanagement.service;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -26,7 +27,7 @@ public class AccountMenegementService implements AccountsService {
 	private UserDetailsManager manager;
 	@Autowired
 	private AccountRepository accounts;
-	@Value("${app.password.period:100}")
+	@Value("${app.password.period:24}")
 	private int passwordPeriod;
 	
 	@Override
@@ -37,13 +38,10 @@ public class AccountMenegementService implements AccountsService {
 		}
 		account.password = encoder.encode(account.password);
 		AccountEntity accountDocument = AccountEntity.of(account);
-		accountDocument.setExpiration(LocalDateTime.now().plusHours(passwordPeriod));
+		accountDocument.setExpiration(LocalDateTime.now(ZoneId.of("UTC")).plusHours(passwordPeriod));
 		accounts.save(accountDocument);
-		manager.createUser(User.withUsername(account.username)
-				.password(account.password)
-				.roles(account.roles)
-				.build());
-		LOG.debug("user {} has been added", account.username);
+		createUserInUserDetailsManager(account.username, account.password, account.roles);
+		LOG.debug("user {} has been added", accountDocument.toString());
 		return true; 
 	}
 
@@ -54,20 +52,19 @@ public class AccountMenegementService implements AccountsService {
 			LOG.debug("user {} doesn't exist", account.username);
 			return false;
 		}
-		if(accountDocument.getExpiration().isBefore(LocalDateTime.now()) && encoder.matches(account.password, accountDocument.getPassword())) {
-			LOG.debug("password is outdated");
-			return false;
-		}
-		account.password = encoder.encode(account.password);
-		accountDocument.setPassword(account.password);
-		accountDocument.setExpiration(LocalDateTime.now().plusHours(passwordPeriod));
+		if(!encoder.matches(account.password, accountDocument.getPassword())) {
+			account.password = encoder.encode(account.password);
+			accountDocument.setPassword(account.password);
+		}		
+		accountDocument.setExpiration(LocalDateTime.now(ZoneId.of("UTC")).plusHours(passwordPeriod));
 		accountDocument.setRevoked(false);
 		accountDocument.setRoles(account.roles);
 		accounts.save(accountDocument);
-		manager.updateUser(User.withUsername(account.username)
-				.password(account.password)
-				.roles(account.roles)
-				.build());
+		if(manager.userExists(account.username)) {
+			updateUserInUserDetailsManager(account);
+		} else {
+			createUserInUserDetailsManager(account.username, account.password, account.roles);
+		}		
 		LOG.debug("user {} has been updated", account.username);
 		return true;
 	}
@@ -75,7 +72,7 @@ public class AccountMenegementService implements AccountsService {
 	@Override
 	@Transactional(readOnly = true)
 	public boolean isExist(String username) {
-		boolean res = accounts.existsById(username) || manager.userExists(username);
+		boolean res = manager.userExists(username);
 		LOG.debug("user {} exist: {}", username, res);	
 		return res;
 	}
@@ -93,17 +90,92 @@ public class AccountMenegementService implements AccountsService {
 	}
 	
 	@PostConstruct
+	@Transactional(readOnly = true)
 	void detailsManagerFilling() {
-		List<AccountEntity> list = accounts.findByExpirationAfterAndRevoked(LocalDateTime.now().toString(), false);
+		List<AccountEntity> list = accounts.findByExpirationAfterAndRevokedIsFalse(LocalDateTime.now(ZoneId.of("UTC")));
+		LOG.debug("accounts retrieved from DB are: {}, current GMT date time is {}", fromAccountEntitesToNames(list), LocalDateTime.now(ZoneId.of("UTC")));
 		list.forEach(a -> {
-			manager.createUser(
-					User.withUsername(a.getEmail())
-					.password(encoder.encode(a.getPassword()))
-					.roles(a.getRoles())
-					.build());
-				LOG.info("added user: {}", manager.loadUserByUsername(a.getEmail()));
+			createUserInUserDetailsManager(a.getEmail(), a.getPassword(), a.getRoles());
+				LOG.debug("added user: {}", manager.loadUserByUsername(a.getEmail()));
 		});
 	}
 
+	@Override
+	@Transactional(readOnly = true)
+	public List<String> getAccountsByRole(String role) {
+		List<AccountEntity> accountsDB = accounts.findByRole(role);
+		List<String> listOfNames = fromAccountEntitesToNames(accountsDB);
+		LOG.debug("accounts by role - {}: {}", role, listOfNames);
+		return listOfNames;
+	}
+
+	@Override
+	@Transactional(readOnly = true)
+	public List<String> getActiveAccounts() {
+		List<AccountEntity> accountsDB = accounts.findByExpirationAfterAndRevokedIsFalse(LocalDateTime.now(ZoneId.of("UTC")));
+		List<String> listOfNames = fromAccountEntitesToNames(accountsDB);
+		LOG.debug("active accounts: {}", listOfNames);
+		return listOfNames;
+	}
+
+	@Override
+	@Transactional(readOnly = true)
+	public int getMaxRoles() {
+		int res = accounts.getMaxRoles();
+		LOG.debug("maximum number of roles: {}", res);
+		return res; 
+	}
+
+	@Override
+	@Transactional(readOnly = true)
+	public List<String> getAllAccountsWithMaxRoles() {
+		List<AccountEntity> accountsDB = accounts.getAllAccountsWithMaxRoles();
+		List<String> listOfNames = fromAccountEntitesToNames(accountsDB);
+		LOG.debug("accounts with max roles: {}", listOfNames);
+		return listOfNames;
+	}
+
+	@Override
+	@Transactional(readOnly = true)
+	public int getMaxRolesOccurrenceCount() {
+		int res = accounts.getMaxRolesOccurrenceCount();
+		LOG.debug("maximum number of recurring roles for all accounts: {}", res);
+		return res;
+	}
+
+	@Override
+	@Transactional(readOnly = true)
+	public List<String> getAllRolesWithMaxOccurrence() {
+		List<AccountEntity> accountsDB = accounts.getAllRolesWithMaxOccurrence();
+		List<String> listOfRoles = fromAccountEntitesToNames(accountsDB);
+		LOG.debug("accounts with max roles: {}", listOfRoles);
+		return listOfRoles;
+	}
+
+	@Override
+	@Transactional(readOnly = true)
+	public int getActivMinRolesOccurrenceCount() {
+		int res = accounts.getActivMinRolesOccurrenceCount();
+		LOG.debug("minimum number of recurring roles in active accounts: {}", res);
+		return res;
+	}
+
+	private List<String> fromAccountEntitesToNames(List<AccountEntity> accountsDB) {
+		return accountsDB.stream().map(AccountEntity::getEmail).toList();
+	}
+
+	private void updateUserInUserDetailsManager(Account account) {
+		manager.updateUser(User.withUsername(account.username)
+				.password(account.password)
+				.roles(account.roles)
+				.build());
+	}
+
+	private void createUserInUserDetailsManager(String username, String password, String[] roles) {
+		manager.createUser(User.withUsername(username)
+				.password(password)
+				.roles(roles)
+				.build());
+	}
 
 }
